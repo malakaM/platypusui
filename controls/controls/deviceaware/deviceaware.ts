@@ -43,6 +43,8 @@
             }
         };
 
+        _lastDevice: string;
+
         initialize(): void {
             this._setDeviceAndOrientation();
             this.addEventListener(this.$window, 'resize', this._setDeviceAndOrientation, false);
@@ -103,6 +105,7 @@
             if (!$utils.isObject(deviceTemplates)) {
                 return;
             } else if ($utils.isNode(deviceTemplates[device])) {
+                this._lastDevice = device;
                 return deviceTemplates[device];
             }
 
@@ -113,8 +116,8 @@
                     return this._determineDeviceTemplate(orientation, DeviceAwareControl.PHABLET);
                 case DeviceAwareControl.PHABLET:
                     return this._determineDeviceTemplate(orientation, DeviceAwareControl.PHONE);
-                // case DeviceAwareControl.PHONE:
-                //    break;
+                case DeviceAwareControl.PHONE:
+                    return deviceTemplates[this._lastDevice];
                 default:
                     return;
             }
