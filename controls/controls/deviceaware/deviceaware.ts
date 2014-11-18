@@ -44,6 +44,7 @@
         };
 
         _determinedDevice: string;
+        _currentKey: string;
 
         initialize(): void {
             this._setDeviceAndOrientation();
@@ -125,7 +126,7 @@
             }
         }
 
-        _addDeterminedDeviceTemplate(overwrite?: boolean): void {
+        _addDeterminedDeviceTemplate(overwrite?: boolean): string {
             var $utils = this.$utils,
                 isNode = $utils.isNode,
                 orientation = this.orientation,
@@ -143,26 +144,34 @@
 
             var key = orientation + '-' + this._determinedDevice;
             if (overwrite !== true && !$utils.isNull(bindableTemplates.templates[key])) {
-                return;
+                return key;
             }
 
             bindableTemplates.add(key, template);
+            return key;
         }
 
-        _bindDeterminedDeviceTemplate(): plat.async.IThenable<void> {
+        _bindDeterminedDeviceTemplate(): void {
             var bindableTemplates = this.bindableTemplates,
                 definedTemplates = bindableTemplates.templates,
                 isNull = this.$utils.isNull,
-                key = this.orientation + '-' + this._determinedDevice;
+                key = this.orientation + '-' + this.device;
 
             if (isNull(definedTemplates[key])) {
-                this._addDeterminedDeviceTemplate();
+                key = this._addDeterminedDeviceTemplate();
                 if (isNull(definedTemplates[key])) {
+                    this.element.removeAttribute(__Hide);
                     return;
                 }
             }
 
-            return this._bindTemplate(key);
+            if (key === this._currentKey) {
+                this.element.removeAttribute(__Hide);
+                return;
+            }
+
+            this._currentKey = key;
+            this._bindTemplate(key);
         }
 
         _bindTemplate(key: string): plat.async.IThenable<void> {
@@ -171,6 +180,7 @@
             this.dom.clearNode(element);
             var templatePromise = this.bindableTemplates.bind(key).then((boundTemplate) => {
                 element.appendChild(boundTemplate);
+                element.removeAttribute(__Hide);
             });
 
             return (this.templateLoaded = templatePromise);
@@ -217,7 +227,8 @@
                 return;
             }
 
-            this._bindDeterminedDeviceTemplate();
+            this.element.setAttribute(__Hide, '');
+            this.$utils.postpone(this._bindDeterminedDeviceTemplate, null, this);
         }
 
         _setDevice(length: number, breakpoints: IDeviceBreakpoints<number>): void {
