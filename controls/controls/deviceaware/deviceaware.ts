@@ -43,7 +43,7 @@
             }
         };
 
-        _lastDevice: string;
+        _determinedDevice: string;
 
         initialize(): void {
             this._setDeviceAndOrientation();
@@ -105,7 +105,7 @@
             if (!$utils.isObject(deviceTemplates)) {
                 return;
             } else if ($utils.isNode(deviceTemplates[device])) {
-                this._lastDevice = device;
+                this._determinedDevice = device;
                 return deviceTemplates[device];
             } else if (device === lowestDevice) {
                 return;
@@ -119,7 +119,7 @@
                 case DeviceAwareControl.PHABLET:
                     return this._determineDeviceTemplate(orientation, DeviceAwareControl.PHONE);
                 case DeviceAwareControl.PHONE:
-                    return deviceTemplates[this._lastDevice];
+                    return deviceTemplates[this._determinedDevice];
                 default:
                     return;
             }
@@ -131,8 +131,7 @@
                 orientation = this.orientation,
                 device = this.device,
                 template = this._determineDeviceTemplate(orientation, device),
-                bindableTemplates = this.bindableTemplates,
-                key = orientation + '-' + device;
+                bindableTemplates = this.bindableTemplates;
 
             // if the template is not a node or overwrite is not true and the template is already set, return
             if (!isNode(template)) {
@@ -140,7 +139,10 @@
                 if (!isNode(template)) {
                     return;
                 }
-            } else if (overwrite !== true && !$utils.isNull(bindableTemplates.templates[key])) {
+            }
+
+            var key = orientation + '-' + this._determinedDevice;
+            if (overwrite !== true && !$utils.isNull(bindableTemplates.templates[key])) {
                 return;
             }
 
@@ -151,7 +153,7 @@
             var bindableTemplates = this.bindableTemplates,
                 definedTemplates = bindableTemplates.templates,
                 isNull = this.$utils.isNull,
-                key = this.orientation + '-' + this.device;
+                key = this.orientation + '-' + this._determinedDevice;
 
             if (isNull(definedTemplates[key])) {
                 this._addDeterminedDeviceTemplate();
