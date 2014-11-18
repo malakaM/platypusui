@@ -55,6 +55,7 @@
     <TypeScriptCompile Include="button\button.ts" />
     <TypeScriptCompile Include="carousel\carousel.ts" />
     <TypeScriptCompile Include="checkbox\checkbox.ts" />
+    <TypeScriptCompile Include="deviceaware\deviceaware.ts" />
     <TypeScriptCompile Include="drawer\drawer.ts" />
     <TypeScriptCompile Include="input\input.ts" />
     <TypeScriptCompile Include="lib\platypus.ts" />
