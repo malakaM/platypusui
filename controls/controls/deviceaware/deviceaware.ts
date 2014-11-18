@@ -21,7 +21,6 @@
         };
 
         $window: Window = plat.acquire(__Window);
-        $document: Document = plat.acquire(__Document);
         $utils: plat.IUtils = plat.acquire(__Utils);
 
         orientation: string;
@@ -53,6 +52,7 @@
 
         setTemplate(): void {
             var isUndefined = this.$utils.isUndefined,
+                dom = this.dom,
                 element = this.element,
                 templates = this.templates,
                 slice = Array.prototype.slice,
@@ -83,7 +83,8 @@
                         continue;
                     }
 
-                    deviceTemplates[innerNodeName] = orientedTemplate.removeChild(childNode);
+                    deviceTemplates[innerNodeName] = dom.appendChildren(slice.call(childNode.childNodes));
+                    orientedTemplate.removeChild(childNode);
                 }
             }
 
