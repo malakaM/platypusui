@@ -97,7 +97,7 @@
 
         orientationChanged(): boolean { return true; }
 
-        _determineDeviceTemplate(orientation: string, device: string): Node {
+        _determineDeviceTemplate(orientation: string, device: string, lowestDevice?: string): Node {
             var $utils = this.$utils,
                 templates = this.templates,
                 deviceTemplates = templates[orientation];
@@ -107,6 +107,8 @@
             } else if ($utils.isNode(deviceTemplates[device])) {
                 this._lastDevice = device;
                 return deviceTemplates[device];
+            } else if (device === lowestDevice) {
+                return;
             }
 
             switch (device) {
@@ -125,6 +127,7 @@
 
         _addDeterminedDeviceTemplate(overwrite?: boolean): void {
             var $utils = this.$utils,
+                isNode = $utils.isNode,
                 orientation = this.orientation,
                 device = this.device,
                 template = this._determineDeviceTemplate(orientation, device),
@@ -132,7 +135,12 @@
                 key = orientation + '-' + device;
 
             // if the template is not a node or overwrite is not true and the template is already set, return
-            if (!($utils.isNode(template) && (overwrite === true || $utils.isNull(bindableTemplates.templates[key])))) {
+            if (!isNode(template)) {
+                template = this._determineDeviceTemplate(orientation, DeviceAwareControl.DESKTOP, device);
+                if (!isNode(template)) {
+                    return;
+                }
+            } else if (overwrite !== true && !$utils.isNull(bindableTemplates.templates[key])) {
                 return;
             }
 
@@ -141,10 +149,15 @@
 
         _bindDeterminedDeviceTemplate(): plat.async.IThenable<void> {
             var bindableTemplates = this.bindableTemplates,
+                definedTemplates = bindableTemplates.templates,
+                isNull = this.$utils.isNull,
                 key = this.orientation + '-' + this.device;
 
-            if (this.$utils.isNull(bindableTemplates.templates[key])) {
+            if (isNull(definedTemplates[key])) {
                 this._addDeterminedDeviceTemplate();
+                if (isNull(definedTemplates[key])) {
+                    return;
+                }
             }
 
             return this._bindTemplate(key);
