@@ -107,7 +107,7 @@ module plat {
         __TrackUp = __Plat + 'trackup',
         __TrackDown = __Plat + 'trackdown',
         __TrackEnd = __Plat + 'trackend',
-        __Anchor = 'a',
+        __Link = __Plat + 'link',
         __ForEach = __Plat + 'foreach',
         __Html = __Plat + 'html',
         __If = __Plat + 'if',
@@ -116,7 +116,7 @@ module plat {
         __Template = __Plat + 'template',
         __Routeport = __Plat + 'routeport',
         __Viewport = __Plat + 'viewport',
-        __Context = __Plat + 'context',
+        __Context = __Plat + __CONTEXT,
     
         /**
          * Lifecycle events
@@ -222,7 +222,21 @@ module plat {
         __JSONP_CALLBACK = 'plat_callback',
         __JS = 'js',
         __NOOP_INJECTOR = 'noop',
-        __APP = '__app__';
+        __APP = '__app__',
+        __CONTEXT = 'context',
+        __RESOURCE = 'resource',
+        __RESOURCES = __RESOURCE + 'es',
+        __ALIAS = 'alias',
+        __ALIASES = __ALIAS + 'es',
+        __OBSERVABLE_RESOURCE = 'observable',
+        __INJECTABLE_RESOURCE = 'injectable',
+        __OBJECT_RESOURCE = 'object',
+        __FUNCTION_RESOURCE = 'function',
+        __LITERAL_RESOURCE = 'literal',
+        __ROOT_RESOURCE = 'root',
+        __ROOT_CONTEXT_RESOURCE = 'rootContext',
+        __CONTROL_RESOURCE = 'control',
+        __CONTEXT_RESOURCE = __CONTEXT;
     /* tslint:enable:no-unused-variable */
     
     /* tslint:disable:no-unused-variable */
@@ -4749,7 +4763,7 @@ module plat {
                 this._makeIdentifiersUnique();
 
                 var parsedExpression: IParsedExpression = {
-                    evaluate: <(context: any, aliases?: any) => any>new Function('context', 'aliases',
+                    evaluate: <(context: any, aliases?: any) => any>new Function(__CONTEXT, __ALIASES,
                         'var initialContext;' +
                         'return ' + (codeArray.length === 0 ? ('"' + expression + '"') : codeArray.join('')) + ';'),
                     expression: expression,
@@ -5519,6 +5533,14 @@ module plat {
              */
             _setUrl(url: string, replace?: boolean): void {
                 url = this._formatUrl(url);
+
+                var utils = this.urlUtils(url);
+
+                if (utils.href.indexOf(Browser.config.baseUrl) === -1) {
+                    location.href = url;
+                    return;
+                }
+
                 if (this.$Compat.pushState) {
 
                     // make sure URL is absolute
@@ -5551,7 +5573,7 @@ module plat {
              */
             _formatUrl(url: string): string {
                 var $config = Browser.config;
-                if ($config.routingType === $config.HASH) {
+                if (url.indexOf($config.baseUrl) > -1 && $config.routingType === $config.HASH) {
                     var hasProtocol = url.indexOf(this.urlUtils().protocol) !== -1,
                         prefix = $config.hashPrefix || '',
                         hashRegex = new RegExp('#' + prefix + '|#/');
@@ -5812,13 +5834,17 @@ module plat {
                         if (baseUrl.indexOf('/') === 0) {
                             baseUrl = baseUrl.slice(1);
                         }
-
-                        if (baseUrl[baseUrl.length - 1] !== '/') {
-                            baseUrl += '/';
-                        }
+                    } else {
+                        baseUrl = '';
                     }
 
-                    $config.baseUrl = UrlUtils.__getBaseUrl(trimmedUrl) + baseUrl;
+                    baseUrl = UrlUtils.__getBaseUrl(trimmedUrl) + baseUrl;
+
+                    while (baseUrl[baseUrl.length - 1] === '/') {
+                        baseUrl = baseUrl.slice(0, -1);
+                    }
+
+                    $config.baseUrl = baseUrl + '/';
                 }
             }
 
@@ -9648,7 +9674,7 @@ module plat {
                 deleteProperty(controls, uid);
 
                 if (!isNull(control.context)) {
-                    ContextManager.defineProperty(control, 'context',
+                    ContextManager.defineProperty(control, __CONTEXT,
                         persist === true ? _clone(control.context, true) : null, true, true);
                 }
             }
@@ -12574,7 +12600,7 @@ module plat {
                 ContextManager = Control.$ContextManagerStatic;
 
             if (isNull(absoluteIdentifier)) {
-                if (property === 'context') {
+                if (property === __CONTEXT) {
                     absoluteIdentifier = (<ui.ITemplateControl>control).absoluteContextPath;
                 } else {
                     return noop;
@@ -12648,7 +12674,7 @@ module plat {
                 alias = aliases[i];
 
                 var resourceObj = findResource(control, alias);
-                if (!isNull(resourceObj) && resourceObj.resource.type === 'observable') {
+                if (!isNull(resourceObj) && resourceObj.resource.type === __OBSERVABLE_RESOURCE) {
                     resources[alias] = getManager(resourceObj.control);
                 }
             }
@@ -13345,13 +13371,13 @@ module plat {
                     alias = alias.slice(1);
                 }
 
-                if (alias === 'rootContext') {
+                if (alias === __ROOT_CONTEXT_RESOURCE) {
                     control = Control.getRootControl(control);
                     return {
                         resource: (<any>control.resources)[alias],
                         control: control
                     };
-                } else if (alias === 'context' || alias === 'control') {
+                } else if (alias === __CONTEXT_RESOURCE || alias === __CONTROL_RESOURCE) {
                     return {
                         resource: (<any>control.resources)[alias],
                         control: control
@@ -13411,8 +13437,8 @@ module plat {
                 TemplateControl.$ManagerCache.remove(uid);
                 Control.removeParent(control);
 
-                define(control, 'context', null, true, true);
-                define(control, 'resources', null, true, true);
+                define(control, __CONTEXT, null, true, true);
+                define(control, __RESOURCES, null, true, true);
                 control.attributes = null;
                 control.bindableTemplates = null;
                 control.controls = [];
@@ -13475,7 +13501,7 @@ module plat {
                     if (isNull((<any>control.resources).rootContext)) {
                         control.resources.add({
                             root: {
-                                type: 'observable',
+                                type: __OBSERVABLE_RESOURCE,
                                 value: value
                             }
                         });
@@ -13487,7 +13513,7 @@ module plat {
                 if (isNull((<any>control.resources).context)) {
                     control.resources.add({
                         context: {
-                            type: 'observable',
+                            type: __OBSERVABLE_RESOURCE,
                             value: value
                         }
                     });
@@ -15876,9 +15902,35 @@ module plat {
          */
         export class Resources implements IResources {
             /**
+             * The injectable resource type token.
+             */
+            static INJECTABLE: string = __INJECTABLE_RESOURCE;
+
+            /**
+             * The object resource type token.
+             */
+            static OBJECT: string = __OBJECT_RESOURCE;
+
+            /**
+             * The observable resource type token.
+             */
+            static OBSERVABLE: string = __OBSERVABLE_RESOURCE;
+
+            /**
+             * The literal resource type token.
+             */
+            static LITERAL: string = __LITERAL_RESOURCE;
+
+            /**
+             * The function resource type token.
+             */
+            static FUNCTION: string = __FUNCTION_RESOURCE;
+
+            /**
              * Reference to the IContextManagerStatic injectable.
              */
             static $ContextManagerStatic: observable.IContextManagerStatic;
+
             /**
              * Reference to the IRegex injectable.
              */
@@ -15898,22 +15950,24 @@ module plat {
                 var value: any;
 
                 switch (resource.type.toLowerCase()) {
-                    case 'injectable':
+                    case __INJECTABLE_RESOURCE:
                         var injector = injectableInjectors[resource.value];
                         if (!isNull(injector)) {
                             resource.value = injector.inject();
                         }
                         break;
-                    case 'observable':
+                    case __OBSERVABLE_RESOURCE:
                         Resources._observeResource(control, resource);
                         break;
-                    case 'object':
+                    case __OBJECT_RESOURCE:
                         value = resource.value;
                         if (isString(value)) {
                             resource.value = control.evaluateExpression(value);
                         }
                         break;
-                    case 'function':
+                    case __LITERAL_RESOURCE:
+                        break;
+                    case __FUNCTION_RESOURCE:
                         value = resource.value;
                         if (isString(value)) {
                             value = (<any>control)[value];
@@ -15942,11 +15996,11 @@ module plat {
                 control.resources.add({
                     context: {
                         value: control.context,
-                        type: 'observable'
+                        type: __OBSERVABLE_RESOURCE
                     },
                     control: {
                         value: control,
-                        type: 'object'
+                        type: __FUNCTION_RESOURCE
                     }
                 });
 
@@ -16014,7 +16068,7 @@ module plat {
                     key = keys[i];
                     resource = (<any>resources)[key];
 
-                    if (!isNull(resource) && resource.type === 'observable') {
+                    if (!isNull(resource) && resource.type === __OBSERVABLE_RESOURCE) {
                         define(resources, key, persist ? _clone(resource, true) : null, true, true);
                     }
                 }
@@ -16052,7 +16106,7 @@ module plat {
                     attrs = child.attributes;
                     resource = <IResource>{};
 
-                    attr = attrs.getNamedItem('alias');
+                    attr = attrs.getNamedItem(__ALIAS);
                     if (isNull(attr)) {
                         continue;
                     }
@@ -16062,7 +16116,7 @@ module plat {
                     if (isEmpty(text)) {
                         continue;
                     }
-                    resource.value = (nodeName === 'injectable') ?
+                    resource.value = (nodeName === __INJECTABLE_RESOURCE || nodeName === __LITERAL_RESOURCE) ?
                         text.replace(quotationRegex, '') : text;
 
                     resource.type = nodeName;
@@ -16133,11 +16187,13 @@ module plat {
             /**
              * A list of resources to place on a control.
              */
-            private static __controlResources = ['control', 'context', 'root', 'rootContext'];
+            private static __controlResources = [__CONTROL_RESOURCE, __CONTEXT_RESOURCE, __ROOT_RESOURCE, __ROOT_CONTEXT_RESOURCE];
+
             /**
              * A list of all resource types.
              */
-            private static __resourceTypes = ['injectable', 'object', 'observable', 'function'];
+            private static __resourceTypes = [__INJECTABLE_RESOURCE, __OBJECT_RESOURCE, __OBSERVABLE_RESOURCE, __FUNCTION_RESOURCE, __LITERAL_RESOURCE];
+
             /**
              * An object consisting of keyed arrays containing functions for removing observation listeners.
              */
@@ -16152,13 +16208,13 @@ module plat {
                 control.resources.add({
                     root: {
                         value: control,
-                        type: 'object',
-                        alias: 'root'
+                        type: __OBJECT_RESOURCE,
+                        alias: __ROOT_RESOURCE
                     },
                     rootContext: {
                         value: control.context,
-                        type: 'observable',
-                        alias: 'rootContext'
+                        type: __OBSERVABLE_RESOURCE,
+                        alias: __ROOT_CONTEXT_RESOURCE
                     }
                 });
             }
@@ -16288,6 +16344,31 @@ module plat {
          * Creates and manages IResources for ITemplateControls.
          */
         export interface IResourcesFactory {
+            /**
+             * The injectable resource type token.
+             */
+            INJECTABLE: string;
+
+            /**
+             * The object resource type token.
+             */
+            OBJECT: string;
+
+            /**
+             * The observable resource type token.
+             */
+            OBSERVABLE: string;
+
+            /**
+             * The literal resource type token.
+             */
+            LITERAL: string;
+
+            /**
+             * The function resource type token.
+             */
+            FUNCTION: string;
+
             /**
              * Populates an IResource value if necessary, and adds it to the given 
              * control's resources.
@@ -20771,7 +20852,7 @@ module plat {
                  */
                 _setListener(): void {
                     if (!this.__listenerSet) {
-                        this.observeArray(this, 'context', this._executeEvent);
+                        this.observeArray(this, __CONTEXT, this._executeEvent);
                         this.__listenerSet = true;
                     }
                 }
@@ -20855,23 +20936,23 @@ module plat {
                     return {
                         index: {
                             value: index,
-                            type: 'observable'
+                            type: __OBSERVABLE_RESOURCE
                         },
                         even: {
                             value: isEven,
-                            type: 'observable'
+                            type: __OBSERVABLE_RESOURCE
                         },
                         odd: {
                             value: !isEven,
-                            type: 'observable'
+                            type: __OBSERVABLE_RESOURCE
                         },
                         first: {
                             value: index === 0,
-                            type: 'observable'
+                            type: __OBSERVABLE_RESOURCE
                         },
                         last: {
                             value: index === (this.context.length - 1),
-                            type: 'observable'
+                            type: __OBSERVABLE_RESOURCE
                         }
                     };
                 }
@@ -21227,7 +21308,7 @@ module plat {
                  */
                 _setListener(): void {
                     if (!this.__listenerSet) {
-                        this.observeArray(this, 'context', this._executeEvent);
+                        this.observeArray(this, __CONTEXT, this._executeEvent);
                         this.__listenerSet = true;
                     }
                 }
@@ -21719,9 +21800,9 @@ module plat {
              * A TemplateControl for adding additonal 
              * functionality to a native HTML anchor tag.
              */
-            export class Anchor extends TemplateControl {
+            export class Link extends TemplateControl {
                 /**
-                 * Replaces the Anchor's element with a native anchor tag.
+                 * Replaces the Link's element with a native anchor tag.
                  */
                 replaceWith = 'a';
 
@@ -21729,6 +21810,11 @@ module plat {
                  * The control's anchor element.
                  */
                 element: HTMLAnchorElement;
+
+                /**
+                 * The a method for removing the click event listener for this control's element.
+                 */
+                removeClickListener: IRemoveListener = noop;
 
                 /**
                  * The IBrowserConfig injectable instance
@@ -21749,11 +21835,14 @@ module plat {
                  * Prevents default on the anchor tag if the href attribute is left empty, also normalizes internal links.
                  */
                 initialize(): void {
-                    var element = this.element,
-                        $browserConfig = this.$browserConfig,
-                        baseUrl = $browserConfig.baseUrl.slice(0, -1);
+                    var element = this.element;
 
-                    this.addEventListener(element, 'click', (ev: Event) => {
+                    this.removeClickListener = this.addEventListener(element, 'click', (ev: Event) => {
+                        ev.preventDefault();
+                        this.removeClickListener();
+                    });
+
+                    this.addEventListener(element, __tap, (ev: Event) => {
                         var href = this.getHref();
 
                         if (isUndefined(href)) {
@@ -21767,7 +21856,28 @@ module plat {
                         }
 
                         this.$browser.url(href);
+                        this.removeClickListener();
+                        element.addEventListener('click', this.getListener(element));
                     }, false);
+
+                }
+
+                /**
+                 * Returns a click event listener. Also handles disposing of the listener.
+                 */
+                getListener(element: HTMLAnchorElement) {
+                    var listener = (ev: Event) => {
+                        ev.preventDefault();
+                        this.removeClickListener();
+                        cancel();
+                        element.removeEventListener('click', listener);
+                    };
+
+                    var cancel = defer(() => {
+                        element.removeEventListener('click', listener);
+                    }, 3000);
+
+                    return listener;
                 }
 
                 /**
@@ -21812,11 +21922,7 @@ module plat {
                         usingHash = routingType !== $browserConfig.STATE,
                         prefix = $browserConfig.hashPrefix;
 
-                    if (href.indexOf(baseUrl) === -1) {
-                        return;
-                    }
-
-                    if (isEmpty(href)) {
+                    if (isEmpty(href) || href.indexOf(baseUrl) === -1) {
                         return href;
                     }
 
@@ -21832,7 +21938,7 @@ module plat {
                 }
             }
 
-            register.control(__Anchor, Anchor);
+            register.control(__Link, Link);
         }
     }
     /**
@@ -22215,7 +22321,7 @@ module plat {
                             resourceObj = resources[alias] = control.findResource(alias);
                         }
 
-                        if (!isNull(resourceObj) && !isNull(resourceObj.resource) && resourceObj.resource.type === 'observable') {
+                        if (!isNull(resourceObj) && !isNull(resourceObj.resource) && resourceObj.resource.type === __OBSERVABLE_RESOURCE) {
                             manager = $contextManager.getManager(resources[alias].control);
                             absoluteIdentifier = 'resources.' + alias + '.value' + absoluteIdentifier;
                         } else {
@@ -23235,7 +23341,7 @@ module plat {
                         childContext = nodeMap.childContext,
                         getManager = this.$ContextManagerStatic.getManager,
                         contextManager: observable.IContextManager,
-                        absoluteContextPath = isNull(parent) ? 'context' : parent.absoluteContextPath,
+                        absoluteContextPath = isNull(parent) ? __CONTEXT : parent.absoluteContextPath,
                         $TemplateControlFactory = this.$TemplateControlFactory,
                         inheritsContext = !uiControl.hasOwnContext;
 
@@ -23250,7 +23356,7 @@ module plat {
 
                             if (isObject(resourceObj)) {
                                 var resource = resourceObj.resource;
-                                if (isObject(resource) && resource.type === 'observable') {
+                                if (isObject(resource) && resource.type === __OBSERVABLE_RESOURCE) {
                                     absoluteContextPath = 'resources.' + alias + '.value' + (split.length > 0 ? ('.' + split.join('.')) : '');
                                     uiControl.root = resourceObj.control;
                                 } else {
@@ -23279,7 +23385,7 @@ module plat {
                         uiControl.context = contextManager.getContext(absoluteContextPath.split('.'));
                         awaitContext = isUndefined(uiControl.context);
                     } else {
-                        absoluteContextPath = 'context';
+                        absoluteContextPath = __CONTEXT;
                     }
 
                     if (awaitContext) {
@@ -23421,7 +23527,7 @@ module plat {
                 }
 
                 this.loadedPromise = new this.$Promise<void>((resolve) => {
-                    var removeListener = this.$ContextManagerStatic.getManager(root).observe('context', {
+                    var removeListener = this.$ContextManagerStatic.getManager(root).observe(__CONTEXT, {
                         listener: () => {
                             removeListener();
                             loadMethod().then(resolve);
@@ -26469,18 +26575,18 @@ module plat {
             property: string = 'href';
 
             /**
-             * The TemplateControl for a plat-href is an Anchor control.
+             * The TemplateControl for a plat-href is an Link control.
              */
-            templateControl: ui.controls.Anchor;
+            templateControl: ui.controls.Link;
 
             /**
-             * Sets the href property, then calls the Anchor control to 
+             * Sets the href property, then calls the Link control to 
              * normalize the href.
              */
             setter() {
                 super.setter();
 
-                var templateControl: ui.controls.Anchor = this.templateControl;
+                var templateControl: ui.controls.Link = this.templateControl;
 
                 if (isObject(templateControl) && isFunction(templateControl.setHref)) {
                     templateControl.setHref();
@@ -26639,7 +26745,7 @@ module plat {
                     var alias = expression.aliases[0],
                         resourceObj = this.parent.findResource(alias);
 
-                    if (isNull(resourceObj) || resourceObj.resource.type !== 'observable') {
+                    if (isNull(resourceObj) || resourceObj.resource.type !== __OBSERVABLE_RESOURCE) {
                         return;
                     }
 
