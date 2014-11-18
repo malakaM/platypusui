@@ -430,7 +430,7 @@ module plat {
                 => (<any>value)[key] !== property));
     }
     
-    function forEach<T>(array: Array <T>, iterator: (value: T, index: number, obj: any) => void, context?: any): Array < T>;
+    function forEach<T>(array: Array <T>, iterator: (value: T, index: number, obj: any) => void, context?: any): Array <T>;
     function forEach<T>(obj: any, iterator: (value: T, key: string, obj: any) => void, context?: any): any;
     function forEach<T>(obj: any, iterator: (value: T, key: any, obj: any) => void, context?: any): any {
         if (isNull(obj) || !(isObject(obj) || isArrayLike(obj))) {
@@ -459,8 +459,8 @@ module plat {
         return obj;
     }
     
-    function map<T, U>(obj: any, iterator: (value: T, key: any, obj: any) => U, context?: any): Array<U> {
-        var arr: Array<U> = [];
+    function map<T, R>(obj: any, iterator: (value: T, key: any, obj: any) => R, context?: any): Array<R> {
+        var arr: Array<R> = [];
     
         if (isNull(obj)) {
             return arr;
@@ -475,6 +475,48 @@ module plat {
         });
     
         return arr;
+    }
+    
+    var Promise: plat.async.IPromise;
+    
+    function mapAsync<T, R>(obj: any, iterator: (value: T, key: any, obj: any) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>> {
+        Promise = Promise || plat.acquire(__Promise);
+    
+        return Promise.all(map(obj, iterator, context));
+    }
+    
+    function mapAsyncWithOrder<T, R>(array: Array<T>, iterator: (value: T, index: number, list: Array<T>) => plat.async.IThenable<R>, context: any, descending?: boolean): plat.async.IThenable<Array<R>> {
+        Promise = Promise || plat.acquire(__Promise);
+        var initialValue = Promise.resolve<Array<R>>([]);
+    
+        if (!isArray(array)) {
+            return initialValue;
+        }
+    
+        iterator = iterator.bind(context);
+    
+        var promise: plat.async.IThenable<Array<R>>,
+            inOrder = (previousValue: plat.async.IThenable<Array<R>>, nextValue: T, nextIndex: number, array: Array<T>): plat.async.IThenable<Array<R>> => {
+                return previousValue.then((items) => {
+                    return iterator(nextValue, nextIndex, array).then((moreItems) => {
+                        return items.concat(moreItems);
+                    });
+                });
+            };
+    
+        if (descending === true) {
+            return array.reduceRight(inOrder, initialValue);    
+        }
+    
+        return array.reduce(inOrder, initialValue);
+    }
+    
+    function mapAsyncInOrder<T, R>(array: Array<T>, iterator: (value: T, index: number, list: Array<T>) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>> {
+        return mapAsyncWithOrder(array, iterator, context);
+    }
+    
+    function mapAsyncInDescendingOrder<T, R>(array: Array<T>, iterator: (value: T, index: number, list: Array<T>) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>> {
+        return mapAsyncWithOrder(array, iterator, context, true);
     }
     
     function pluck<T, U>(obj: any, key: string): Array<U> {
@@ -2880,21 +2922,21 @@ module plat {
          * Takes in an array and a function to evaluate the properties in the array.
          * Returns a filtered array of objects resulting from evaluating the function.
          * @param {Array<T>} array The Array to filter.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator The iterator function to call with array's properties. 
+         * @param {plat.IListIterator<T, boolean>} iterator The iterator function to call with array's properties. 
          * Returns true if the property should be kept, false otherwise.
          * @param {any} context? Optional context with which to call the iterator.
          */
-        filter<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => boolean, context?: any): Array<T>;
+        filter<T>(array: Array<T>, iterator: IListIterator<T, boolean>, context?: any): Array<T>;
         /**
          * Takes in an object/array and a function to evaluate the properties in the object/array.
          * Returns a filtered array of objects resulting from evaluating the function.
-         * @param {any} obj The object to filter.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator The iterator function to call with array's properties. 
+         * @param {plat.IObject<T>} obj The object to filter.
+         * @param {plat.IObjectIterator<T, boolean>} iterator The iterator function to call with array's properties. 
          * Returns true if the property should be kept, false otherwise.
          * @param {any} context? Optional context with which to call the iterator.
          */
-        filter<T>(obj: any, iterator: (value: T, key: any, obj: any) => boolean, context?: any): Array<T>;
-        filter<T>(obj: any, iterator: (value: T, key: any, obj: any) => boolean, context?: any): Array<T> {
+        filter<T>(obj: IObject<T>, iterator: IObjectIterator<T, boolean>, context?: any): Array<T>;
+        filter(obj: any, iterator: (value: any, key: any, obj: any) => boolean, context?: any): Array<any> {
             return filter(obj, iterator, context);
         }
 
@@ -2903,34 +2945,27 @@ module plat {
          * @param {Array<T>} array The list used for searching for properties.
          * @param {any} properties An object containing key/value pairs to match with obj's values.
          */
-        where<T>(array: Array<T>, properties: any): Array<T>;
-        /**
-         * Takes in a list and object containing key/value pairs to search for in the list.
-         * @param {any} obj The object used for searching for properties.
-         * @param {any} properties An object containing key/value pairs to match with obj's values.
-         */
-        where<T>(obj: any, properties: any): Array<T>;
-        where(obj: any, properties: any): Array<any> {
-            return where(obj, properties);
+        where<T, U extends {}>(array: Array<T>, properties: U): Array<T> {
+            return where(array, properties);
         }
 
         /**
          * Takes in an Array and a function to iterate over. Calls the iterator function with every property
          * in the Array, then returns the object.
          * @param {Array<T>} array An Array.
-         * @param {(value: T, index: number, obj: any) => void} iterator A method that takes in a value, index, and the object.
+         * @param {plat.IListIterator<T, void>} iterator A method that takes in a value, index, and the object.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        forEach<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => void, context?: any): Array<T>;
+        forEach<T>(array: Array<T>, iterator: IListIterator<T, void>, context?: any): Array<T>;
         /**
          * Takes in an Array and a function to iterate over. Calls the iterator function with every property
          * in the Array, then returns the object.
-         * @param {any} obj An object.
-         * @param {(value: T, index: number, obj: any) => void} iterator A method that takes in a value, index, and the object.
+         * @param {plat.IObject<T>} obj An object.
+         * @param {plat.IObjectIterator<T, void>} iterator A method that takes in a value, index, and the object.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        forEach<T>(obj: any, iterator: (value: T, key: string, obj: any) => void, context?: any): any;
-        forEach<T>(obj: any, iterator: (value: T, key: any, obj: any) => void, context?: any): any {
+        forEach<T>(obj: IObject<T>, iterator: IObjectIterator<T, void>, context?: any): IObject<T>;
+        forEach(obj: any, iterator: (value: any, key: any, obj: any) => void, context?: any): any {
             return forEach(obj, iterator, context);
         }
 
@@ -2939,21 +2974,67 @@ module plat {
          * iterator can transform the object and return it. The returned values will be pushed to an Array and 
          * returned.
          * @param {Array<T>} array An Array.
-         * @param {(value: T, index: number, obj: any) => U} iterator The transformation function.
+         * @param {plat.IListIterator<T, R>} iterator The transformation function.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        map<T, U>(array: Array<T>, iterator: (value: T, index: number, obj: any) => U, context?: any): Array<U>;
+        map<T, R>(array: Array<T>, iterator: IListIterator<T, R>, context?: any): Array<R>;
         /**
          * Takes in an object and an iterator function. Calls the iterator with all the values in the object. The 
          * iterator can transform the object and return it. The returned values will be pushed to an Array and 
          * returned.
-         * @param {Array<T>} obj An Object.
+         * @param {plat.IObject<T>} obj An Object.
          * @param {(value: T, index: number, obj: any) => U} iterator The transformation function.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        map<T, U>(obj: any, iterator: (value: T, key: string, obj: any) => U, context?: any): Array<U>;
-        map<T, U>(obj: any, iterator: (value: T, key: any, obj: any) => U, context?: any): Array<U> {
-            return map<T, U>(obj, iterator, context);
+        map<T, R>(obj: IObject<T>, iterator: IObjectIterator<T, R>, context?: any): Array<R>;
+        map(obj: any, iterator: (value: any, key: any, obj: any) => any, context?: any): Array<any> {
+            return map<any, any>(obj, iterator, context);
+        }
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array. The 
+         * iterator can return a promise the will resolve with the mapped value. The returned values will be pushed 
+         * to an Array. A promise is returned that will resolve when all the iterators have resolved.
+         * @param {Array<T>} array An array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsync<T, R>(array: Array<T>, iterator: IListIterator<T, async.IThenable<R>>, context?: any): async.IThenable<Array<R>>;
+        /**
+         * Takes in an object and an iterator function. Calls the iterator with all the values in the object. The 
+         * iterator can return a promise the will resolve with the mapped value. The returned values will be pushed 
+         * to an Array. A promise is returned that will resolve when all the iterators have resolved.
+         * @param {plat.IObject<T>} obj An Object.
+         * @param {plat.IObjectIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsync<T, R>(obj: IObject<T>, iterator: IObjectIterator<T, async.IThenable<R>>, context?: any): plat.async.IThenable<Array<R>>;
+        mapAsync<T, R>(obj: any, iterator: (value: T, key: any, obj: any) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>> {
+            return mapAsync(obj, iterator, context);
+        }
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array. The 
+         * iterator can return a promise the will resolve with the mapped value. The next value in the array will not be passed to 
+         * the iterator until the previous promise fulfills.
+         * @param {Array<T>} array An Array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsyncInOrder<T, R>(array: Array<T>, iterator: IListIterator<T, async.IThenable<R>>, context?: any): plat.async.IThenable<Array<R>> {
+            return mapAsyncInOrder(array, iterator, context);
+        }
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array in descending order. The 
+         * iterator can return a promise the will resolve with the mapped value. The next value in the array will not be passed to 
+         * the iterator until the previous promise fulfills.
+         * @param {Array<T>} array An Array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsyncInDescendingOrder<T, R>(array: Array<T>, iterator: (value: T, index: number, list: Array<T>) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>> {
+            return mapAsyncInDescendingOrder(array, iterator, context);
         }
 
         /**
@@ -2962,28 +3043,28 @@ module plat {
          * @param {any} obj An object.
          * @param {string} key The property to 'pluck' from each value in obj.
          */
-        pluck<T, U>(obj: any, key: string): Array<U> {
-            return map<T, U>(obj, (value) => (<any>value)[key]);
+        pluck<T extends {}>(obj: Array<T>, key: string): Array<any> {
+            return map<T, any>(obj, (value) => (<any>value)[key]);
         }
 
         /**
          * Takes in an array and an iterator. Evaluates all the values in the array with the iterator.
          * Returns true if any of the iterators return true, otherwise returns false.
          * @param {Array<T>} array An array.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator A method with which to evaluate all the values in obj.
+         * @param {plat.IListIterator<T, boolean>} iterator A method with which to evaluate all the values in obj.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        some<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => boolean, context?: any): boolean;
+        some<T>(array: Array<T>, iterator: IListIterator<T, boolean>, context?: any): boolean;
         /**
          * Takes in an array and an iterator. Evaluates all the values in the array with the iterator.
          * Returns true if any of the iterators return true, otherwise returns false.
-         * @param {Array<T>} obj An object.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator A method with which to evaluate all the values in obj.
+         * @param {plat.IObject<T>} obj An object.
+         * @param {plat.IObjectIterator<T, boolean>} iterator A method with which to evaluate all the values in obj.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        some<T>(obj: any, iterator: (value: T, key: string, obj: any) => boolean, context?: any): boolean;
-        some<T>(obj: any, iterator: (value: T, key: any, obj: any) => boolean, context?: any): boolean {
-            return some<T>(obj, iterator, context);
+        some<T>(obj: IObject<T>, iterator: IObjectIterator<T, boolean>, context?: any): boolean;
+        some(obj: any, iterator: (value: any, key: any, obj: any) => boolean, context?: any): boolean {
+            return some(obj, iterator, context);
         }
 
         /**
@@ -3187,69 +3268,102 @@ module plat {
          * Takes in an array and a function to evaluate the properties in the array.
          * Returns a filtered array of objects resulting from evaluating the function.
          * @param {Array<T>} array The Array to filter.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator The iterator function to call with array's properties.
+         * @param {plat.IListIterator<T, boolean>} iterator The iterator function to call with array's properties. 
          * Returns true if the property should be kept, false otherwise.
          * @param {any} context? Optional context with which to call the iterator.
          */
-        filter<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => boolean, context?: any): Array<T>;
+        filter<T>(array: Array<T>, iterator: IListIterator<T, boolean>, context?: any): Array<T>;
         /**
          * Takes in an object/array and a function to evaluate the properties in the object/array.
          * Returns a filtered array of objects resulting from evaluating the function.
-         * @param {any} obj The object to filter.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator The iterator function to call with array's properties. 
+         * @param {plat.IObject<T>} obj The object to filter.
+         * @param {plat.IObjectIterator<T, boolean>} iterator The iterator function to call with array's properties. 
          * Returns true if the property should be kept, false otherwise.
          * @param {any} context? Optional context with which to call the iterator.
          */
-        filter<T>(obj: any, iterator: (value: T, key: any, obj: any) => boolean, context?: any): Array<T>;
+        filter<T>(obj: IObject<T>, iterator: IObjectIterator<T, boolean>, context?: any): Array<T>;
 
         /**
          * Takes in a list and object containing key/value pairs to search for in the list.
          * @param {Array<T>} array The list used for searching for properties.
          * @param {any} properties An object containing key/value pairs to match with obj's values.
          */
-        where<T>(array: Array<T>, properties: any): Array<T>;
-        /**
-         * Takes in a list and object containing key/value pairs to search for in the list.
-         * @param {any} obj The object used for searching for properties.
-         * @param {any} properties An object containing key/value pairs to match with obj's values.
-         */
-        where<T>(obj: any, properties: any): Array<T>;
+        where<T, U extends {}>(array: Array<T>, properties: U): Array<T>
 
         /**
          * Takes in an Array and a function to iterate over. Calls the iterator function with every property
          * in the Array, then returns the object.
          * @param {Array<T>} array An Array.
-         * @param {(value: T, index: number, obj: any) => void} iterator A method that takes in a value, index, and the object.
+         * @param {plat.IListIterator<T, void>} iterator A method that takes in a value, index, and the object.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        forEach<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => void, context?: any): Array<T>;
+        forEach<T>(array: Array<T>, iterator: IListIterator<T, void>, context?: any): Array<T>;
         /**
          * Takes in an Array and a function to iterate over. Calls the iterator function with every property
          * in the Array, then returns the object.
-         * @param {any} obj An object.
-         * @param {(value: T, index: number, obj: any) => void} iterator A method that takes in a value, index, and the object.
+         * @param {plat.IObject<T>} obj An object.
+         * @param {plat.IObjectIterator<T, void>} iterator A method that takes in a value, index, and the object.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        forEach<T>(obj: any, iterator: (value: T, key: string, obj: any) => void, context?: any): any;
+        forEach<T>(obj: IObject<T>, iterator: IObjectIterator<T, void>, context?: any): IObject<T>;
 
         /**
-         * Takes in an object and an iterator function. Calls the iterator with all the values in the object. The 
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array. The 
          * iterator can transform the object and return it. The returned values will be pushed to an Array and 
          * returned.
          * @param {Array<T>} array An Array.
-         * @param {(value: T, index: number, obj: any) => U} iterator The transformation function.
+         * @param {plat.IListIterator<T, R>} iterator The transformation function.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        map<T, U>(array: Array<T>, iterator: (value: T, index: number, obj: any) => U, context?: any): Array<U>;
+        map<T, R>(array: Array<T>, iterator: IListIterator<T, R>, context?: any): Array<R>;
         /**
          * Takes in an object and an iterator function. Calls the iterator with all the values in the object. The 
          * iterator can transform the object and return it. The returned values will be pushed to an Array and 
          * returned.
-         * @param {Array<T>} obj An Object.
-         * @param {(value: T, index: number, obj: any) => U} iterator The transformation function.
+         * @param {plat.IObject<T>} obj An Object.
+         * @param {plat.IObjectIterator<T, R>} iterator The transformation function.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        map<T, U>(obj: any, iterator: (value: T, key: string, obj: any) => U, context?: any): Array<U>;
+        map<T, R>(obj: IObject<T>, iterator: IObjectIterator<T, R>, context?: any): Array<R>;
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array. The 
+         * iterator can return a promise the will resolve with the mapped value. The returned values will be pushed 
+         * to an Array. A promise is returned that will resolve when all the iterators have resolved.
+         * @param {Array<T>} array An array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsync<T, R>(array: Array<T>, iterator: IListIterator<T, async.IThenable<R>>, context?: any): async.IThenable<Array<R>>;
+        /**
+         * Takes in an object and an iterator function. Calls the iterator with all the values in the object. The 
+         * iterator can return a promise the will resolve with the mapped value. The returned values will be pushed 
+         * to an Array. A promise is returned that will resolve when all the iterators have resolved.
+         * @param {plat.IObject<T>} obj An Object.
+         * @param {plat.IObjectIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsync<T, R>(obj: IObject<T>, iterator: IObjectIterator<T, async.IThenable<R>>, context?: any): plat.async.IThenable<Array<R>>;
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array. The 
+         * iterator can return a promise the will resolve with the mapped value. The next value in the array will not be passed to 
+         * the iterator until the previous promise fulfills.
+         * @param {Array<T>} array An Array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsyncInOrder<T, R>(array: Array<T>, iterator: IListIterator<T, async.IThenable<R>>, context?: any): plat.async.IThenable<Array<R>>;
+
+        /**
+         * Takes in an array and an iterator function. Calls the iterator with all the values in the array in descending order. The 
+         * iterator can return a promise the will resolve with the mapped value. The next value in the array will not be passed to 
+         * the iterator until the previous promise fulfills.
+         * @param {Array<T>} array An Array.
+         * @param {plat.IListIterator<T, plat.async.IThenable<R>>} iterator The transformation function.
+         * @param {any} context? An optional context to bind to the iterator.
+         */
+        mapAsyncInDescendingOrder<T, R>(array: Array<T>, iterator: (value: T, index: number, list: Array<T>) => plat.async.IThenable<R>, context?: any): plat.async.IThenable<Array<R>>;
 
         /**
          * Takes in an object and a property to extract from all of the object's values. Returns an array of
@@ -3257,24 +3371,24 @@ module plat {
          * @param {any} obj An object.
          * @param {string} key The property to 'pluck' from each value in obj.
          */
-        pluck<T, U>(obj: any, key: string): Array<U>;
+        pluck<T extends {}>(obj: Array<T>, key: string): Array<any>;
 
         /**
          * Takes in an array and an iterator. Evaluates all the values in the array with the iterator.
          * Returns true if any of the iterators return true, otherwise returns false.
          * @param {Array<T>} array An array.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator A method with which to evaluate all the values in obj.
+         * @param {plat.IListIterator<T, boolean>} iterator A method with which to evaluate all the values in obj.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        some<T>(array: Array<T>, iterator: (value: T, index: number, obj: any) => boolean, context?: any): boolean;
+        some<T>(array: Array<T>, iterator: IListIterator<T, boolean>, context?: any): boolean;
         /**
          * Takes in an array and an iterator. Evaluates all the values in the array with the iterator.
          * Returns true if any of the iterators return true, otherwise returns false.
-         * @param {Array<T>} obj An object.
-         * @param {(value: T, index: number, obj: any) => boolean} iterator A method with which to evaluate all the values in obj.
+         * @param {plat.IObject<T>} obj An object.
+         * @param {plat.IObjectIterator<T, boolean>} iterator A method with which to evaluate all the values in obj.
          * @param {any} context? An optional context to bind to the iterator.
          */
-        some<T>(obj: any, iterator: (value: T, key: string, obj: any) => boolean, context?: any): boolean;
+        some<T>(obj: IObject<T>, iterator: IObjectIterator<T, boolean>, context?: any): boolean;
 
         /**
          * Takes in a method and array of arguments to pass to that method. Delays calling the method until 
@@ -3312,23 +3426,29 @@ module plat {
     }
 
     /**
-     * The Type for a Utils iterator callback method.
+     * The Type for a IUtils list iterator callback method.
      */
-    export interface IIterator<T, U> {
+    export interface IListIterator<T, R> {
         /**
-         * A method signature for IIterator.
+         * A method signature for IListIterator.
          * @param {T} value The value for an object during an iteration.
          * @param {number} index The index where the value can be found.
-         * @param {any} obj The object passed into the util method.
+         * @param {Array<T>} list The array passed into the util method.
          */
-        (value: T, index: number, obj: any): U;
+        (value: T, index: number, list: Array<T>): R;
+    }
+
+    /**
+     * The Type for a IUtils object iterator callback method.
+     */
+    export interface IObjectIterator<T, R> {
         /**
-         * A method signature for IIterator.
+         * A method signature for IObjectIterator.
          * @param {T} value The value for an object during an iteration.
          * @param {string} key The key where the value can be found.
-         * @param {any} obj The object passed into the util method.
+         * @param {plat.IObject<T>} obj The object passed into the util method.
          */
-        (value: T, key: string, obj: any): U;
+        (value: T, key: string, obj: IObject<T>): R;
     }
 
     /**
@@ -6603,7 +6723,7 @@ module plat {
 
             /**
              * Returns a promise that resolves with the input value.
-             * @param {R} value The value to resolve.
+             * @param {R} value? The value to resolve.
              */
             static resolve<R>(value?: R): IThenable<R> {
                 return new Promise<R>((resolve: (value: R) => any, reject: (reason: any) => any) => {
@@ -7142,9 +7262,9 @@ module plat {
 
             /**
              * Returns a promise that resolves with the input value.
-             * @param {R} value The value to resolve.
+             * @param {R} value? The value to resolve.
              */
-            resolve<R>(value: R): IThenable<R>;
+            resolve<R>(value?: R): IThenable<R>;
 
             /**
              * Returns a promise that rejects with the input value.
@@ -11836,8 +11956,8 @@ module plat {
              * @param {any} sender The object that initiated the event.
              * @param {string} direction='direct' This will always be a direct event no matter what is sent in.
              */
-            initialize(name: string, sender: any, direction?: 'direct', eventOptions?: INavigationEventOptions<P>);
-            initialize(name: string, sender: any, direction?: string, eventOptions?: INavigationEventOptions<P>);
+            initialize(name: string, sender: any, direction?: 'direct', eventOptions?: INavigationEventOptions<P>): void;
+            initialize(name: string, sender: any, direction?: string, eventOptions?: INavigationEventOptions<P>): void;
 
             /**
              * If the event is cancelable, calling this method will cancel the event.
@@ -15100,6 +15220,24 @@ module plat {
             }
 
             /**
+             * Determines whether or not a control was created using bindableTemplates.
+             * @param {plat.ui.ITemplateControl} control The potential bound control.
+             */
+            static isBoundControl(control: ITemplateControl): boolean {
+                if (isNull(control)) {
+                    return false;
+                }
+
+                var parent = control.parent;
+
+                if (isNull(parent)) {
+                    return false;
+                }
+
+                return control.type.indexOf(parent.type + __BOUND_PREFIX) === 0;
+            }
+
+            /**
              * Reference to the IResourcesFactory injectable.
              */
             $ResourcesFactory: IResourcesFactory = acquire(__ResourcesFactory);
@@ -15429,11 +15567,18 @@ module plat {
                 var $TemplateControlFactory = this.$TemplateControlFactory,
                     control = $TemplateControlFactory.getInstance(),
                     $ResourcesFactory = this.$ResourcesFactory,
-                    parent = this.control;
+                    parent = this.control,
+                    compiledManager = this._cache[key],
+                    _resources = $ResourcesFactory.getInstance();
 
-                var _resources = $ResourcesFactory.getInstance();
+                if (isObject(compiledManager)) {
+                    var compiledControl = compiledManager.getUiControl();
 
-                _resources.initialize(control, resources);
+                    _resources.initialize(control, compiledControl.resources);
+                    _resources.add(resources);
+                } else {
+                    _resources.initialize(control, resources);
+                }
 
                 control.resources = _resources;
                 $ResourcesFactory.addControlResources(control);
@@ -15486,6 +15631,12 @@ module plat {
              * @param {plat.ui.ITemplateControl} control The control whose bindableTemplates will be disposed.
              */
             dispose(control: ITemplateControl): void;
+
+            /**
+             * Determines whether or not a control was created using bindableTemplates.
+             * @param {plat.ui.ITemplateControl} control The potential bound control.
+             */
+            isBoundControl(control: ITemplateControl): boolean
         }
 
         /**
@@ -18844,8 +18995,8 @@ module plat {
                  */
                 resolve(): IAnimatingThenable {
                     var animationPromise = new AnimationPromise((resolve) => {
-                        resolve(() => {
-                            return animationPromise;
+                        resolve(<IGetAnimatingThenable>() => {
+                            return <IAnimationThenable<void>><any>animationPromise;
                         });
                     });
 
@@ -22902,6 +23053,11 @@ module plat {
             $TemplateControlFactory: ui.ITemplateControlFactory = acquire(__TemplateControlFactory);
 
             /**
+             * Reference to the IBindableTemplatesFactory injectable.
+             */
+            $BindableTeampltesFactory: ui.IBindableTemplatesFactory = acquire(__BindableTemplatesFactory);
+
+            /**
              * The child managers for this manager.
              */
             children: Array<INodeManager> = [];
@@ -23170,7 +23326,13 @@ module plat {
                     }, (error) => {
                         this.templatePromise = null;
                         if (isNull(error)) {
-                            this._initializeControl(control, error);
+                            var template: DocumentFragment = error;
+
+                            if (this.$BindableTeampltesFactory.isBoundControl(control)) {
+                                template = <DocumentFragment>appendChildren(control.element.childNodes);
+                            }
+
+                            this._initializeControl(control, template);
                         } else {
                             postpone(() => {
                                 var $exception: IExceptionStatic = acquire(__ExceptionStatic);
@@ -26318,8 +26480,10 @@ module plat {
             setter() {
                 super.setter();
 
-                if (isFunction(this.templateControl.setHref)) {
-                    this.templateControl.setHref();
+                var templateControl: ui.controls.Anchor = this.templateControl;
+
+                if (isObject(templateControl) && isFunction(templateControl.setHref)) {
+                    templateControl.setHref();
                 }
             }
         }
